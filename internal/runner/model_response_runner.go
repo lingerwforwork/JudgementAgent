@@ -65,30 +65,30 @@ type ModelResponseRunner interface {
 	Clear() error
 }
 
-type ModelResponseRunnerImpl struct {
+type modelResponseRunnerImpl struct {
 	cli         *client.Client
 	template    string
 	WorkDirTmpl string
 	tmpDir      string
 }
 
-func NewModelResponseRunnerImpl(template string, cli *client.Client) *ModelResponseRunnerImpl {
+func NewModelResponseRunner(template string, cli *client.Client) ModelResponseRunner {
 	tmpl := template
 	if template == "" {
 		tmpl = promptTemplate
 	}
-	return &ModelResponseRunnerImpl{
+	return &modelResponseRunnerImpl{
 		cli:         cli,
 		template:    tmpl,
 		WorkDirTmpl: WORK_DIR_TMPL,
 	}
 }
 
-func (runner *ModelResponseRunnerImpl) GetMemoryRequired() int {
+func (runner *modelResponseRunnerImpl) GetMemoryRequired() int {
 	return JUDGE_REQUIRED_MEMORY_MB
 }
 
-func (runner *ModelResponseRunnerImpl) buildJudgeInputs(judgeModelInputs []JudgeModelInput) ([]Input, error) {
+func (runner *modelResponseRunnerImpl) buildJudgeInputs(judgeModelInputs []JudgeModelInput) ([]Input, error) {
 	tmpl, err := template.New("").Parse(runner.template)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func mapJudgeModelOutputs(outputs []JudgeModelOutput) []Output {
 	return results
 }
 
-func (runner *ModelResponseRunnerImpl) Run(gpuIds []uint32, stdout, stderr io.Writer, judgeModelInputs []JudgeModelInput) ([]Output, error) {
+func (runner *modelResponseRunnerImpl) Run(gpuIds []uint32, stdout, stderr io.Writer, judgeModelInputs []JudgeModelInput) ([]Output, error) {
 	inputs, err := runner.buildJudgeInputs(judgeModelInputs)
 	if err != nil {
 		return nil, err
@@ -221,7 +221,7 @@ func (runner *ModelResponseRunnerImpl) Run(gpuIds []uint32, stdout, stderr io.Wr
 
 }
 
-func (runner *ModelResponseRunnerImpl) Clear() error {
+func (runner *modelResponseRunnerImpl) Clear() error {
 	if runner.tmpDir != "" {
 		return os.RemoveAll(runner.tmpDir)
 	}
