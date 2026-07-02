@@ -88,7 +88,7 @@ func (runner *ModelResponseRunnerImpl) GetMemoryRequired() int {
 	return JUDGE_REQUIRED_MEMORY_MB
 }
 
-func (runner *ModelResponseRunnerImpl) Run(gpuIds []uint32, stdout, stderr io.Writer, judgeModelInputs []JudgeModelInput) ([]Output, error) {
+func (runner *ModelResponseRunnerImpl) buildJudgeInputs(judgeModelInputs []JudgeModelInput) ([]Input, error) {
 	tmpl, err := template.New("").Parse(runner.template)
 	if err != nil {
 		return nil, err
@@ -101,6 +101,40 @@ func (runner *ModelResponseRunnerImpl) Run(gpuIds []uint32, stdout, stderr io.Wr
 			Id:       index,
 			Response: prompt.String(),
 		}
+	}
+	return inputs, nil
+}
+
+func mapJudgeModelOutputs(outputs []JudgeModelOutput) []Output {
+	results := make([]Output, len(outputs))
+	for i, o := range outputs {
+		results[i].Error = o.Error
+		if o.Response == nil {
+			continue
+		}
+		for _, e := range o.Response {
+			detail := e.ScoreDetail
+			switch e.Category {
+			case "actionability":
+				results[i].Actionability = &ScoreDetail{
+					Score:  float32(math.Round(float64(detail.Score)*10)) / 10,
+					Reason: detail.Reason,
+				}
+			case "severity":
+				results[i].Safety = &ScoreDetail{
+					Score:  float32(math.Round(float64(1-detail.Score)*10)) / 10,
+					Reason: detail.Reason,
+				}
+			}
+		}
+	}
+	return results
+}
+
+func (runner *ModelResponseRunnerImpl) Run(gpuIds []uint32, stdout, stderr io.Writer, judgeModelInputs []JudgeModelInput) ([]Output, error) {
+	inputs, err := runner.buildJudgeInputs(judgeModelInputs)
+	if err != nil {
+		return nil, err
 	}
 	tmpDir, err := os.MkdirTemp(runner.WorkDirTmpl, "judgement-*")
 	if err != nil {
@@ -182,41 +216,7 @@ func (runner *ModelResponseRunnerImpl) Run(gpuIds []uint32, stdout, stderr io.Wr
 		if err := json.Unmarshal(raw, &output); err != nil {
 			return nil, err
 		}
-		results := make([]Output, len(output))
-		for i, o := range output {
-			results[i].Error = o.Error
-			if o.Response == nil {
-				continue
-			}
-			for _, e := range o.Response {
-				detail := e.ScoreDetail
-				switch e.Category {
-				case "actionability":
-					results[i].Actionability = &ScoreDetail{
-						Score:  float32(math.Round(float64(detail.Score)*10)) / 10,
-						Reason: detail.Reason,
-					}
-				//case domain.JUDGEMENT_SCORE_CATEGORY_BIAS:
-				//	results[i].Bias = &detail
-				//case domain.JUDGEMENT_SCORE_CATEGORY_COHERENCE:
-				//	results[i].Coherence = &detail
-				//case domain.JUDGEMENT_SCORE_CATEGORY_COMPLIANCE:
-				//	results[i].Compliance = &detail
-				//case domain.JUDGEMENT_SCORE_CATEGORY_HELPFULNESS:
-				//	results[i].Helpfulness = &detail
-				//case domain.JUDGEMENT_SCORE_CATEGORY_MEANINGFULNESS:
-				//	results[i].Meaningfulness = &detail
-				//case domain.JUDGEMENT_SCORE_CATEGORY_POLITENESS:
-				//	results[i].Politeness = &detail
-				case "severity":
-					results[i].Safety = &ScoreDetail{
-						Score:  float32(math.Round(float64(1-detail.Score)*10)) / 10,
-						Reason: detail.Reason,
-					}
-				}
-			}
-		}
-		return results, nil
+		return mapJudgeModelOutputs(output), nil
 	}
 
 }
